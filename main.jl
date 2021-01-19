@@ -55,4 +55,4 @@ const output = Vector{OutputRow}(undef, n*length(estimators))
     CSV.write(filename, DataFrame(output, copycols = false), append = true)
 end
 
-print("Wrote estimates to $fname\n")
+print("Wrote estimates to $filename\n")

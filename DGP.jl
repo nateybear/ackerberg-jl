@@ -11,7 +11,7 @@ Base.@kwdef mutable struct Globals
     nfirms::Integer = 1000
     nperiodsTotal::Integer = 111
     nperiodsKeep::Integer = 11
-    niterations::Integer = 10
+    niterations::Integer = 1000
 
     # the true coefficient values
     beta0::Float64 = 1
