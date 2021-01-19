@@ -10,17 +10,16 @@ using ForwardDiff: gradient, hessian
 using Intervals
 using Pipe: @pipe
 
-export acfObjective, estimateACF, estimateOLS, anomaly
-
-anomaly = nothing
+export acfObjective, estimateACF, estimateOLS
 
 """
+    Given a data struct, create the objective function that we will minimize as part of the ACF procedure.
 
-
+    This is separate from the estimateACF function so that a Newton step can be taken in the estimateOLS function.
 
 """
 function acfObjective(data::Data)
-    ϕ = begin
+    ϕ = let
         X = [ data.lnKapital[:] data.lnIntermedInput[:] ]
         X = [ ones(size(X, 1)) X ]
         y = data.lnOutput[:] - globals.betaL * data.lnLabor[:]
@@ -41,9 +40,9 @@ function acfObjective(data::Data)
     l₋₁ = lag(:lnLabor)
     l₀ = lead(:lnLabor)
 
-    function(θ)
+    return function(θ)
         # innovation term from ω process
-        ξ = begin
+        ξ = let
             ω₋₁ = ϕ₋₁ - θ[1] *  k₋₁
             ω₀ = ϕ₀ - θ[1] *  k₀
 
@@ -60,22 +59,22 @@ function acfObjective(data::Data)
         σ² = cov(Ψ)
         n = length(Ψ)
 
-        n * μ^2 / σ²
+        return n * μ^2 / σ²
     end
 end
 
 estimateACF(data::Data) = @pipe data |> acfObjective |> optimize(_, 0, 1) |> Optim.minimizer(_)[1]
 
-
-function makePolynomial(order::Integer, vecs::Vararg{Vector{T}}) where {T <: Real}
-    ncols = ( 1:(order+1) for _ in 1:length(vecs) )
-
-    map(product(ncols...)) do indexes
-        slices = map(enumerate(indexes)) do (vec, power)
-            vecs[vec] .^ (power-1)
+function makePolynomial(order::Integer, vecs::Vararg{Vector{T}})::Matrix{T} where {T <: Real}
+    powers = fill(0:order, length(vecs))
+    vector_multiply(vecs::Vararg{Vector{T}}) = broadcast(*, vecs...)
+    
+    # each term is a vector of the powers to which we want to raise each corresponding element of vecs
+    mapreduce(hcat, product(powers...)) do term
+        mapreduce(vector_multiply, enumerate(term)) do (i, power)
+            vecs[i] .^ power
         end
-        broadcast(*, slices...)
-    end |> x->hcat(x...)
+    end
 end
 
 function estimateOLS(data::Data; includeKNoShock = false, newtonSteps = 0)
@@ -101,8 +100,7 @@ function estimateOLS(data::Data; includeKNoShock = false, newtonSteps = 0)
     β = ((X'X) \ (X'y))[1]
 
 
-    step = begin
-        f = acfObjective(data)
+    step = let f = acfObjective(data)
         α -> ( α - (gradient(f, [α])/hessian(f, [α]))[1] )
     end
     
@@ -112,13 +110,13 @@ function estimateOLS(data::Data; includeKNoShock = false, newtonSteps = 0)
     for _ in 1:newtonSteps
         βʼ = step(β)
         if ~( βʼ ∈ 0..1 )
-            return(β)
+            return β
         else
             β = βʼ
         end
     end
     
-    return(β)
+    return β
 end
 
 end

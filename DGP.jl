@@ -2,6 +2,7 @@ module DGP
 
 using Random: randn
 
+
 export globals, Data, generateData, setDGP
 
 ############## GLOBALS STRUCTS DEFINITION ###################
