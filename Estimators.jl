@@ -13,7 +13,7 @@ using DecisionTree
 using ScikitLearn
 using UUIDs
 
-fit_np(X, y) = fit_predict!(RandomForestRegressor(impurity_importance = false, n_trees=100, max_depth=10, partial_sampling = 0.5, n_subfeatures = size(X, 2)), X, y)
+fit_np(X, y) = fit_predict!(RandomForestRegressor(impurity_importance=false, n_trees=100, max_depth=10, partial_sampling=0.5, n_subfeatures=size(X, 2)), X, y)
 
 fit_lm(X, y) =
     let X = [ones(size(X, 1)) X]
@@ -22,7 +22,7 @@ fit_lm(X, y) =
 
 export acfObjective, estimateACF, estimateOLS
 
-const cache = Dict{UUID, Function}()
+const cache = Dict{UUID,Function}()
 
 """
     Given a data struct, create the objective function that we will minimize as part of the ACF procedure.
@@ -52,22 +52,30 @@ function acfObjective(data::Data)
     l₋₁ = lag(:lnLabor)
     l₀ = lead(:lnLabor)
 
-    out = function (θ)
-        # innovation term from ω process
-        ξ = let
-            ω₋₁ = ϕ₋₁ - θ[1] * k₋₁ - θ[2] * l₋₁
-            ω₀ = ϕ₀ - θ[1] * k₀ - θ[2] * l₀
+    # use this let scope to avoid having to use the CUE
+    # estimator (which is apt to run to infinity)
+    out = let
+        W = nothing
+        function (θ)
+            # innovation term from ω process
+            ξ = let
+                ω₋₁ = ϕ₋₁ - θ[1] * k₋₁ - θ[2] * l₋₁
+                ω₀ = ϕ₀ - θ[1] * k₀ - θ[2] * l₀
 
-            ω₀ - fit_lm(ω₋₁, ω₀)
+                ω₀ - fit_lm(ω₋₁, ω₀)
+            end
+
+            moments = ξ .* [k₀ l₋₁]
+
+            if isnothing(W)
+                W = cov(moments)
+            end
+
+            μ = mean(moments, dims=1)
+            n = size(moments, 1)
+
+            return n * only(μ * (W \ μ'))
         end
-
-        moments = ξ .* [k₀ l₋₁]
-
-        μ = mean(moments, dims=1)
-        Σ = cov(moments)
-        n = size(moments, 1)
-
-        return n * only(μ * (Σ \ μ'))
     end
 
     empty!(cache)
@@ -76,7 +84,7 @@ function acfObjective(data::Data)
     out
 end
 
-estimateACF(data::Data) = @pipe data |> acfObjective |> optimize(_, [0.0, 0.0]) |> Optim.minimizer(_)
+estimateACF(data::Data) = @pipe data |> acfObjective |> optimize(_, [0.5, 0.5]) |> Optim.minimizer(_)
 
 function makePolynomial(order::Integer, vecs::Vararg{Vector{T}})::Matrix{T} where {T<:Real}
     powers = fill(0:order, length(vecs))
