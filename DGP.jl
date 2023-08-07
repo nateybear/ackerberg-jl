@@ -1,6 +1,7 @@
 module DGP
 
 using Random: randn
+using UUIDs
 
 
 export globals, Data, generateData, setDGP
@@ -94,6 +95,7 @@ setDGP()
 ################### DATA STRUCT DEFINITION #######################
 
 mutable struct Data
+    id::UUID
     lnLabor::Matrix{Float64} 
     lnKapital::Matrix{Float64} 
     lnKapitalNoShock::Matrix{Float64} 
@@ -106,10 +108,12 @@ mutable struct Data
     omegaTminusB::Matrix{Float64} 
     epsilon::Matrix{Float64}
     Data() = begin
-        init = ( zeros(globals.nperiodsTotal, globals.nfirms) for _ in fieldnames(Data) )
-        new(init...)
+        init = ( zeros(globals.nperiodsTotal, globals.nfirms) for _ in DataFields )
+        new(uuid4(), init...)
     end
 end
+
+const DataFields = setdiff(fieldnames(Data), (:id,))
 
 function generateExogenousShocks(data::Data)
     sigmaEpsilon = 0.1
@@ -216,7 +220,7 @@ function calculateFirmOutput(data::Data)
 end
 
 function keepLastN(data::Data)
-    for field in fieldnames(Data)
+    for field in DataFields
         lastN = getfield(data, field)[(end - globals.nperiodsKeep + 1):end, :]
         setfield!(data, field, lastN)
     end
